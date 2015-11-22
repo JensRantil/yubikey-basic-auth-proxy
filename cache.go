@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// A cache that holds values for a certain expiration since write. New writes
+// will postpone the expiration.
 type Cache struct {
 	timers map[string]*time.Timer
 	mutex  *sync.RWMutex
