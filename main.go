@@ -33,7 +33,7 @@ var (
 	credentials = app.Command("credentials", "Commands to modify credentials")
 
 	add                = credentials.Command("add", "Add a credentials.")
-	addCredentialsFile = serve.Flag(CREDENTIALS_FILE_FLAG, CREDENTIALS_FILE_FLAG_DESCRIPTION).Default(CREDENTIALS_FILE_DEFAULT_FLAG).String()
+	addCredentialsFile = add.Flag(CREDENTIALS_FILE_FLAG, CREDENTIALS_FILE_FLAG_DESCRIPTION).Default(CREDENTIALS_FILE_DEFAULT_FLAG).String()
 	addUsername        = add.Arg("username", "Username to add.").Required().String()
 	addYubikey         = add.Arg("yubikey", "The 12 character yubikey identifier.").Required().String()
 	addPassword        = add.Arg("password", "Optional password. If not defined, it will be asked for interactively.").String()
