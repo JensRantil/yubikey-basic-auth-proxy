@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -10,43 +12,34 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-const (
-	CREDENTIALS_FILE_FLAG             = "credentials-file"
-	CREDENTIALS_FILE_DEFAULT_FLAG     = "credentials.json"
-	CREDENTIALS_FILE_FLAG_DESCRIPTION = "The file that stores the credentials."
-)
-
 var (
-	app = kingpin.New("yubikey-basic-auth-proxy", "HTTP Proxy that adds a layer of Basic Auth that does Yubikey authentication.")
+	app             = kingpin.New("yubikey-basic-auth-proxy", "HTTP Proxy that adds a layer of Basic Auth that does Yubikey authentication.").Version("0.0.1")
+	credentialsFile = app.Flag("credentials-file", "The file that stores the credentials.").Default("credentials.json").String()
 
-	serve                = app.Command("serve", "Run the proxy.")
-	upstream             = serve.Arg("upstream", "The full URL to upstream server.").Required().URL()
-	listen               = serve.Flag("listen", "What to listen on.").Default(":80").String()
-	authCookieName       = serve.Flag("auth-cookie", "Name of cookie holding temporary authentication data.").Default("X-AUTHENTICATED").String()
-	cookieExpiration     = serve.Flag("auth-expiration", "The duration of which a correct authentication will be persist.").Default("30m").Duration()
-	authPath             = serve.Flag("auth-path", "The path on which authentication will occur. Shouldn't be an existing path upstream.").Default("/x-authenticate").String()
-	cacheExpiration      = serve.Flag("cache-expiration", "The expiration duration for logins").Default("30m").Duration()
-	yubicoId             = serve.Arg("yubico-api-id", "The ID used when connecting to Yubico's API.").Required().String()
-	yubicoKey            = serve.Arg("yubico-api-key", "The key used when connecting to Yubico's API.").Required().String()
-	serveCredentialsFile = serve.Flag(CREDENTIALS_FILE_FLAG, CREDENTIALS_FILE_FLAG_DESCRIPTION).Default(CREDENTIALS_FILE_DEFAULT_FLAG).File()
+	serve            = app.Command("serve", "Run the proxy.")
+	upstream         = serve.Arg("upstream", "The full URL to upstream server.").Required().URL()
+	listen           = serve.Flag("listen", "What to listen on.").Default(":80").String()
+	authCookieName   = serve.Flag("auth-cookie", "Name of cookie holding temporary authentication data.").Default("X-AUTHENTICATED").String()
+	cookieExpiration = serve.Flag("auth-expiration", "The duration of which a correct authentication will be persist.").Default("30m").Duration()
+	authPath         = serve.Flag("auth-path", "The path on which authentication will occur. Shouldn't be an existing path upstream.").Default("/x-authenticate").String()
+	cacheExpiration  = serve.Flag("cache-expiration", "The expiration duration for logins").Default("30m").Duration()
+	yubicoId         = serve.Arg("yubico-api-id", "The ID used when connecting to Yubico's API.").Required().String()
+	yubicoKey        = serve.Arg("yubico-api-key", "The key used when connecting to Yubico's API.").Required().String()
 
-	credentials = app.Command("credentials", "Commands to modify credentials")
+	credentials = app.Command("credentials", "Commands to modify credentials.")
 
-	add                = credentials.Command("add", "Add a credentials.")
-	addCredentialsFile = add.Flag(CREDENTIALS_FILE_FLAG, CREDENTIALS_FILE_FLAG_DESCRIPTION).Default(CREDENTIALS_FILE_DEFAULT_FLAG).String()
-	addUsername        = add.Arg("username", "Username to add.").Required().String()
-	addYubikey         = add.Arg("yubikey", "The 12 character yubikey identifier.").Required().String()
-	addPassword        = add.Arg("password", "Optional password. If not defined, it will be asked for interactively.").String()
+	initialize = credentials.Command("init", "Initialize ACL config.")
 
-	list                = credentials.Command("list", "List the credentials.")
-	listCredentialsFile = list.Flag(CREDENTIALS_FILE_FLAG, CREDENTIALS_FILE_FLAG_DESCRIPTION).Default(CREDENTIALS_FILE_DEFAULT_FLAG).File()
+	add         = credentials.Command("add", "Add a credentials.")
+	addUsername = add.Arg("username", "Username to add.").Required().String()
+	addYubikey  = add.Arg("yubikey", "The 12 character yubikey identifier. Can also be a Yubikey OTP, which automatically will be truncated.").Required().String()
+	addPassword = add.Arg("password", "Optional password. If not defined, it will be asked for interactively.").String()
 
-	remove                = credentials.Command("delete", "Delete a credentials.")
-	removeCredentialsFile = remove.Flag(CREDENTIALS_FILE_FLAG, CREDENTIALS_FILE_FLAG_DESCRIPTION).Default(CREDENTIALS_FILE_DEFAULT_FLAG).File()
-	removeUsername        = remove.Arg("username", "Username to remove. Only given a single username when multiple usernames exist, will fail this command.").Required().String()
-	removeYubico          = remove.Arg("yubikey", "Optional yubikey identifier if a username has multiple records.").String()
+	list = credentials.Command("list", "List the credentials.")
 
-	// TODO: Support modifying a key?
+	remove         = credentials.Command("remove", "Delete a credentials.")
+	removeUsername = remove.Arg("username", "Username to remove. Only given a single username when multiple usernames exist, will fail this command.").Required().String()
+	removeYubico   = remove.Arg("yubikey", "Optional yubikey identifier if a username has multiple records.").String()
 )
 
 type CookieCache interface {
@@ -54,15 +47,108 @@ type CookieCache interface {
 	IsStillThere(cache string) bool
 }
 
-func init() {
-	app.Version("0.0.1")
+func loadACLCredentials(filename string) (*ACLConfig, error) {
+	var file *os.File
+	if _file, err := os.Open(filename); err != nil {
+		return nil, err
+	} else {
+		file = _file
+	}
+	defer file.Close()
+
+	if result, err := NewACLConfigFromReader(file); err == nil && result.Version != 1 {
+		return result, errors.New("Unsupported version of ACL configuration.")
+	} else {
+		return result, err
+	}
+}
+
+func saveACLCredentials(filename string, aclConfig *ACLConfig) error {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return aclConfig.WriteTo(file)
 }
 
 func main() {
-	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
+	flagCommand := kingpin.MustParse(app.Parse(os.Args[1:]))
+
+	switch flagCommand {
+	case "credentials init":
+		aclConfig := NewACLConfig()
+		// TODO: Fail if file already exists. Possibly support forcing recreation of it.
+		if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
+			log.Fatal(err)
+		}
 	case "credentials add":
+		// TODO: Support interactive input of password so that it doesn't end up in shell history.
+
+		var aclConfig *ACLConfig
+		if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
+			if err != os.ErrNotExist {
+				log.Fatal("Could not load credentials:", err)
+			} else {
+				aclConfig = NewACLConfig()
+			}
+		} else {
+			aclConfig = _aclConfig
+		}
+
+		truncatedYubikey := *addYubikey
+		if len(truncatedYubikey) < 12 {
+			log.Fatal("Yubikey must be at least 12 characters.")
+		}
+		truncatedYubikey = truncatedYubikey[0:12]
+
+		var newEntry *UserEntry
+		if e, err := NewUserEntry(*addUsername, *addPassword, truncatedYubikey, DefaultScryptData); err != nil {
+			log.Fatal(err)
+		} else {
+			newEntry = e
+		}
+		aclConfig.Entries = append(aclConfig.Entries, *newEntry)
+
+		if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
+			log.Fatal(err)
+		}
+
 	case "credentials remove":
+		var aclConfig *ACLConfig
+		if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
+			if err != os.ErrNotExist {
+				log.Fatal("Could not load credentials:", err)
+			} else {
+				aclConfig = NewACLConfig()
+			}
+		} else {
+			aclConfig = _aclConfig
+		}
+
+		filteredEntries := make([]UserEntry, 0)
+		for _, entry := range aclConfig.Entries {
+			if entry.Username != *removeUsername && (removeYubico == nil || entry.Yubikey != *removeYubico) {
+				filteredEntries = append(filteredEntries, entry)
+			}
+		}
+		aclConfig.Entries = filteredEntries
+
+		if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
+			log.Fatal(err)
+		}
+
 	case "credentials list":
+		aclConfig, err := loadACLCredentials(*credentialsFile)
+		if err != nil {
+			log.Fatal("Could not load credentials:", err)
+		}
+
+		for _, entry := range aclConfig.Entries {
+			fmt.Printf("username: %s                 yubikey: %s\n", entry.Username, entry.Yubikey)
+		}
+
 	case "serve":
 		var yubiAuth *yubigo.YubiAuth
 		if _yubiAuth, err := yubigo.NewYubiAuth(*yubicoId, *yubicoKey); err != nil {
