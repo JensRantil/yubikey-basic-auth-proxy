@@ -42,10 +42,10 @@ func NewUserEntry(username, password, yubikey string, scryptData ScryptData) (*U
 	}
 
 	var hash []byte
-	if hash, err := scryptData.CalculateHash([]byte(password), salt); err != nil {
+	if _hash, err := scryptData.CalculateHash([]byte(password), salt); err != nil {
 		return nil, err
 	} else {
-		hash = hash
+		hash = _hash
 	}
 
 	u := UserEntry{

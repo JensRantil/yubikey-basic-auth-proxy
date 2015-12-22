@@ -65,10 +65,10 @@ func main() {
 	case "credentials list":
 	case "serve":
 		var yubiAuth *yubigo.YubiAuth
-		if yubiAuth, err := yubigo.NewYubiAuth(*yubicoId, *yubicoKey); err != nil {
-			log.Fatal("Could not instantiate the yubico connector:", err.Error())
+		if _yubiAuth, err := yubigo.NewYubiAuth(*yubicoId, *yubicoKey); err != nil {
+			log.Fatal("Could not instantiate the yubico connector:", err)
 		} else {
-			yubiAuth = yubiAuth
+			yubiAuth = _yubiAuth
 		}
 
 		// Instantiate the authentication proxy.
@@ -77,10 +77,10 @@ func main() {
 		cache := NewCache(*cacheExpiration)
 
 		var acl *ACLConfig
-		if acl, err := NewACLConfigFromReader(*serveCredentialsFile); err != nil {
+		if _acl, err := loadACLCredentials(*credentialsFile); err != nil {
 			log.Fatal(err)
 		} else {
-			acl = acl
+			acl = _acl
 		}
 
 		authProxy := authProxyHandler{
