@@ -94,7 +94,7 @@ func main() {
 		}
 
 		// TODO: Support (and default to) TLS
-		log.Fatal(http.ListenAndServe(":8080", authProxy))
+		log.Fatal(http.ListenAndServe(*listen, authProxy))
 	default:
 		app.FatalUsage("Unrecognized command.")
 	}
