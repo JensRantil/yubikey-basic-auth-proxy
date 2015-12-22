@@ -9,23 +9,23 @@ import (
 )
 
 type ScryptEntry struct {
-	params ScryptData
-	hash   []byte
-	salt   []byte
+	Params ScryptData
+	Hash   []byte
+	Salt   []byte
 }
 
 func (s *ScryptEntry) Test(password string) (bool, error) {
-	hash, err := s.params.CalculateHash([]byte(password), s.salt)
+	hash, err := s.Params.CalculateHash([]byte(password), s.Salt)
 	if err != nil {
 		return false, err
 	}
-	return bytes.Equal(hash, s.hash), nil
+	return bytes.Equal(hash, s.Hash), nil
 }
 
 type UserEntry struct {
-	username     string
-	yubikey      string
-	passwordHash ScryptEntry
+	Username     string
+	Yubikey      string
+	PasswordHash ScryptEntry
 }
 
 const SALT_LENGTH = 32
@@ -49,21 +49,28 @@ func NewUserEntry(username, password, yubikey string, scryptData ScryptData) (*U
 	}
 
 	u := UserEntry{
-		passwordHash: ScryptEntry{
-			params: scryptData,
-			hash:   hash,
-			salt:   salt,
+		PasswordHash: ScryptEntry{
+			Params: scryptData,
+			Hash:   hash,
+			Salt:   salt,
 		},
-		username: username,
-		yubikey:  yubikey,
+		Username: username,
+		Yubikey:  yubikey,
 	}
 
 	return &u, nil
 }
 
 type ACLConfig struct {
-	version int // Used to support other configuration versions in the future.
-	entries []UserEntry
+	Version int // Used to support other configuration versions in the future.
+	Entries []UserEntry
+}
+
+func NewACLConfig() *ACLConfig {
+	return &ACLConfig{
+		Version: 1,
+		Entries: make([]UserEntry, 0),
+	}
 }
 
 func NewACLConfigFromReader(reader io.Reader) (*ACLConfig, error) {

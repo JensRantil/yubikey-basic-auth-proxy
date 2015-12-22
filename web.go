@@ -28,13 +28,13 @@ func (a *authProxyHandler) validateCredentialsForEntry(entry UserEntry, username
 
 	// Validate username.
 
-	if entry.username != username {
+	if entry.Username != username {
 		return false
 	}
 
 	// Validate password.
 
-	if ok, _ := entry.passwordHash.Test(password); !ok {
+	if ok, _ := entry.PasswordHash.Test(password); !ok {
 		return false
 	}
 
@@ -55,7 +55,7 @@ func (a *authProxyHandler) validateCredentials(username string, basicAuthPasswor
 	passwordString := basicAuthPassword[0 : len(basicAuthPassword)-44]
 	yubikeyString := basicAuthPassword[len(basicAuthPassword)-44 : len(basicAuthPassword)]
 
-	for _, entry := range a.acl.entries {
+	for _, entry := range a.acl.Entries {
 		if a.validateCredentialsForEntry(entry, username, passwordString, yubikeyString) {
 			return true, nil
 		}
