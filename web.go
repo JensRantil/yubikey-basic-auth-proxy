@@ -131,6 +131,7 @@ func (a authProxyHandler) authenticate(resp http.ResponseWriter, req *http.Reque
 		a.temporaryRedirectToRealPage(resp, req)
 	} else {
 		// Ask for authentication
+		resp.Header()["WWW-Authenticate"] = []string{"Basic realm=\"Please enter your username, followed by password+yubikey\""}
 		resp.WriteHeader(http.StatusUnauthorized)
 	}
 }
