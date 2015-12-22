@@ -164,7 +164,7 @@ func main() {
 
 		var acl *ACLConfig
 		if _acl, err := loadACLCredentials(*credentialsFile); err != nil {
-			log.Fatal(err)
+			log.Fatal("Could not load credentials:", err)
 		} else {
 			acl = _acl
 		}

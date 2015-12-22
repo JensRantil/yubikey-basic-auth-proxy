@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"time"
@@ -34,13 +35,17 @@ func (a *authProxyHandler) validateCredentialsForEntry(entry UserEntry, username
 
 	// Validate password.
 
-	if ok, _ := entry.PasswordHash.Test(password); !ok {
+	if ok, err := entry.PasswordHash.Test(password); !ok {
+		log.Println("Could not validate password:", err)
 		return false
 	}
 
 	// Validate Yubikey.
 
-	_, ok, _ := a.yubiAuth.Verify(yubiKey)
+	_, ok, err := a.yubiAuth.Verify(yubiKey)
+	if err != nil {
+		log.Println("Could not validate against Yubico:", err)
+	}
 	return ok
 }
 
