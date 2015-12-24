@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -14,14 +13,12 @@ import (
 )
 
 type authProxyHandler struct {
-	acl                   *ACLConfig
-	cache                 Cache
-	authPath              string
-	authCookieName        string
-	authNextPageQueryName string
-	proxy                 *httputil.ReverseProxy
-	yubiAuth              *yubigo.YubiAuth
-	cookieExpiration      time.Duration
+	acl              *ACLConfig
+	cache            Cache
+	authCookieName   string
+	proxy            *httputil.ReverseProxy
+	yubiAuth         *yubigo.YubiAuth
+	cookieExpiration time.Duration
 }
 
 // Returns a boolean only (no error) to make validation of this return value easier.
@@ -77,30 +74,14 @@ func (a authProxyHandler) isAuthenticated(req *http.Request) bool {
 	}
 }
 
-func (a authProxyHandler) isOnAuthenticationURL(req *http.Request) bool {
-	return req.URL.Path == a.authPath
-}
-
-func (a authProxyHandler) temporaryRedirectToRealPage(resp http.ResponseWriter, req *http.Request) {
-	nextPage := req.URL.Query().Get(a.authNextPageQueryName)
-
-	if nextPage == "" {
-		// Something is buggy.
-		resp.WriteHeader(http.StatusBadRequest)
-
-		// XXX: This is wrong. It not be content, but could be headers etc. Should use http.ServeContent instead.
-		resp.Write([]byte(fmt.Sprintf("Expected '%s' query parameter.", a.authNextPageQueryName)))
+func generateRandomString(bytesSource int) (string, error) {
+	slots := make([]byte, 32)
+	if _, err := rand.Reader.Read(slots); err != nil {
+		return "", err
 	} else {
-		temporaryRedirectTo(resp, req, nextPage)
+		return hex.EncodeToString(slots), nil
 	}
-}
 
-func temporaryRedirectTo(resp http.ResponseWriter, req *http.Request, path string) {
-	http.Redirect(resp, req, path, http.StatusTemporaryRedirect)
-}
-
-func (a authProxyHandler) temporaryRedirectToAuthPath(resp http.ResponseWriter, req *http.Request) {
-	temporaryRedirectTo(resp, req, a.authPath)
 }
 
 func (a authProxyHandler) authenticate(resp http.ResponseWriter, req *http.Request) {
@@ -110,19 +91,20 @@ func (a authProxyHandler) authenticate(resp http.ResponseWriter, req *http.Reque
 		valid = true
 	}
 
-	if username, password, ok := req.BasicAuth(); ok {
-		valid, _ = a.validateCredentials(username, password)
+	if !valid {
+		if username, password, ok := req.BasicAuth(); ok {
+			valid, _ = a.validateCredentials(username, password)
+		}
 	}
 
 	if valid {
 		var randValue string
-		slots := make([]byte, 32)
-		if _, err := rand.Reader.Read(slots); err != nil {
+		if _randValue, err := generateRandomString(32); err != nil {
 			// TODO: Log
 			resp.WriteHeader(http.StatusInternalServerError)
 			return
 		} else {
-			randValue = hex.EncodeToString(slots)
+			randValue = _randValue
 		}
 
 		cookie := http.Cookie{
@@ -133,7 +115,10 @@ func (a authProxyHandler) authenticate(resp http.ResponseWriter, req *http.Reque
 		http.SetCookie(resp, &cookie)
 		a.cache.Add(randValue)
 
-		a.temporaryRedirectToRealPage(resp, req)
+		// Important we don't proxy our username and password upstream!
+		delete(req.Header, "Authorization")
+
+		a.proxy.ServeHTTP(resp, req)
 	} else {
 		// Ask for authentication
 		resp.Header()["WWW-Authenticate"] = []string{"Basic realm=\"Please enter your username, followed by password+yubikey\""}
@@ -142,16 +127,10 @@ func (a authProxyHandler) authenticate(resp http.ResponseWriter, req *http.Reque
 }
 
 func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	if a.isOnAuthenticationURL(req) {
-		// Authenticated
-		a.authenticate(resp, req)
+	if a.isAuthenticated(req) {
+		// Proxy upstream
+		a.proxy.ServeHTTP(resp, req)
 	} else {
-		if a.isAuthenticated(req) {
-			// Proxy upstream
-			a.proxy.ServeHTTP(resp, req)
-		} else {
-			// Redirect to auth page.
-			a.temporaryRedirectToAuthPath(resp, req)
-		}
+		a.authenticate(resp, req)
 	}
 }

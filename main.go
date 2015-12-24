@@ -21,7 +21,6 @@ var (
 	listen           = serve.Flag("listen", "What to listen on.").Default(":80").String()
 	authCookieName   = serve.Flag("auth-cookie", "Name of cookie holding temporary authentication data.").Default("X-AUTHENTICATED").String()
 	cookieExpiration = serve.Flag("auth-expiration", "The duration of which a correct authentication will be persist.").Default("30m").Duration()
-	authPath         = serve.Flag("auth-path", "The path on which authentication will occur. Shouldn't be an existing path upstream.").Default("/x-authenticate").String()
 	cacheExpiration  = serve.Flag("cache-expiration", "The expiration duration for logins").Default("30m").Duration()
 	yubicoId         = serve.Arg("yubico-api-id", "The ID used when connecting to Yubico's API.").Required().String()
 	yubicoKey        = serve.Arg("yubico-api-key", "The key used when connecting to Yubico's API.").Required().String()
@@ -171,7 +170,6 @@ func main() {
 
 		authProxy := authProxyHandler{
 			acl:              acl,
-			authPath:         *authPath,
 			authCookieName:   *authCookieName,
 			yubiAuth:         yubiAuth,
 			cache:            *cache,
