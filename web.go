@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 	"time"
 
 	"github.com/GeertJohan/yubigo"
@@ -84,7 +85,22 @@ func generateRandomString(bytesSource int) (string, error) {
 
 }
 
-func (a authProxyHandler) authenticate(resp http.ResponseWriter, req *http.Request) {
+func (a authProxyHandler) stripAuthCookie(req *http.Request) {
+	if cookieHeaders, ok := req.Header["Cookie"]; ok {
+		for i, cookieHeader := range cookieHeaders {
+			cookies := strings.Split(cookieHeader, "; ")
+			newCookies := make([]string, 0)
+			for _, cookie := range cookies {
+				if !strings.HasPrefix(cookie, a.authCookieName+"=") {
+					newCookies = append(newCookies, cookie)
+				}
+			}
+			cookieHeaders[i] = strings.Join(newCookies, "; ")
+		}
+	}
+}
+
+func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	valid := false
 
 	if a.isAuthenticated(req) {
@@ -118,19 +134,13 @@ func (a authProxyHandler) authenticate(resp http.ResponseWriter, req *http.Reque
 		// Important we don't proxy our username and password upstream!
 		delete(req.Header, "Authorization")
 
+		// Don't proxy the auth cookie.
+		a.stripAuthCookie(req)
+
 		a.proxy.ServeHTTP(resp, req)
 	} else {
 		// Ask for authentication
 		resp.Header()["WWW-Authenticate"] = []string{"Basic realm=\"Please enter your username, followed by password+yubikey\""}
 		resp.WriteHeader(http.StatusUnauthorized)
-	}
-}
-
-func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
-	if a.isAuthenticated(req) {
-		// Proxy upstream
-		a.proxy.ServeHTTP(resp, req)
-	} else {
-		a.authenticate(resp, req)
 	}
 }
