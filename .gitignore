@@ -1,2 +1,7 @@
 yubikey-basic-auth-proxy
 credentials.json
+
+server.crt
+server.key
+server.key.org
+server.csr
