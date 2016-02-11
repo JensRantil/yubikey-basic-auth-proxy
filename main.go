@@ -24,6 +24,9 @@ var (
 	cacheExpiration  = serve.Flag("cache-expiration", "The expiration duration for logins").Default("30m").Duration()
 	yubicoId         = serve.Arg("yubico-api-id", "The ID used when connecting to Yubico's API.").Required().String()
 	yubicoKey        = serve.Arg("yubico-api-key", "The key used when connecting to Yubico's API.").Required().String()
+	insecure         = serve.Flag("insecure", "Whether").Default("false").Bool()
+	certificateFile  = serve.Flag("certificate-file", "Public key file for TLS.").ExistingFile()
+	privateKeyFile   = serve.Flag("private-key-file", "Private key file for TLS.").ExistingFile()
 
 	credentials = app.Command("credentials", "Commands to modify credentials.")
 
@@ -149,6 +152,11 @@ func main() {
 		}
 
 	case "serve":
+
+		if !xor(*insecure, *certificateFile != "" && *privateKeyFile != "") {
+			app.FatalUsage("Either set certificate and private key for TLS (recommended), or set --insecure flag.")
+		}
+
 		var yubiAuth *yubigo.YubiAuth
 		if _yubiAuth, err := yubigo.NewYubiAuth(*yubicoId, *yubicoKey); err != nil {
 			log.Fatal("Could not instantiate the yubico connector:", err)
@@ -177,8 +185,11 @@ func main() {
 			cookieExpiration: *cacheExpiration,
 		}
 
-		// TODO: Support (and default to) TLS
-		log.Fatal(http.ListenAndServe(*listen, authProxy))
+		if *insecure {
+			log.Fatal(http.ListenAndServe(*listen, authProxy))
+		} else {
+			log.Fatal(http.ListenAndServeTLS(*listen, *certificateFile, *privateKeyFile, authProxy))
+		}
 	default:
 		app.FatalUsage("Unrecognized command.")
 	}
