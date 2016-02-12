@@ -15,6 +15,7 @@ import (
 var (
 	app             = kingpin.New("yubikey-basic-auth-proxy", "HTTP Proxy that adds a layer of Basic Auth that does Yubikey authentication.").Version("0.0.1")
 	credentialsFile = app.Flag("credentials-file", "The file that stores the credentials.").Default("credentials.json").String()
+	logLevelFlag    = app.Flag("log-level", "Set log level.").Default("INFO").Enum("DEBUG", "INFO", "WARN", "ERROR")
 
 	serve            = app.Command("serve", "Run the proxy.")
 	upstream         = serve.Arg("upstream", "The full URL to upstream server.").Required().URL()
@@ -75,8 +76,36 @@ func saveACLCredentials(filename string, aclConfig *ACLConfig) error {
 	return aclConfig.WriteTo(file)
 }
 
+var (
+	logger MethodLogger
+)
+
+func initLogging() {
+	// Not entirely pretty. Is there a better solution?
+	logLevel, existed := logLevelByName[*logLevelFlag]
+	if !existed {
+		log.Fatalln("Could not find log level:", *logLevelFlag)
+	}
+
+	json := &JSONOutputter{
+		os.Stderr,
+	}
+	recordLogger := &LogRecordLogger{
+		json,
+	}
+	filteredLogger := &LogLevelFilter{
+		logLevel,
+		recordLogger,
+	}
+	logger = MethodLogger{
+		filteredLogger,
+	}
+}
+
 func main() {
 	flagCommand := kingpin.MustParse(app.Parse(os.Args[1:]))
+
+	initLogging()
 
 	switch flagCommand {
 	case "credentials init":
