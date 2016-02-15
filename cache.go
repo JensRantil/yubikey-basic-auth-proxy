@@ -23,33 +23,60 @@ type checkValueExistCommand struct {
 	exists chan bool
 }
 
+type timer interface {
+	channel() <-chan time.Time
+	stop()
+}
+
+type timerFactory interface {
+	create(time.Duration) timer
+}
+
+type realTimer struct {
+	delegate *time.Timer
+}
+
+func (r *realTimer) channel() <-chan time.Time {
+	return r.delegate.C
+}
+
+func (r *realTimer) stop() {
+	r.delegate.Stop()
+}
+
+type realTimerFactory struct{}
+
+func (r realTimerFactory) create(d time.Duration) timer {
+	return &realTimer{time.NewTimer(d)}
+}
+
 // Access-expired cache that holds values for a certain expiration since write.
 // New writes will postpone the expiration.
 type Cache struct {
-	data       map[string]CacheValue
-	setChan    chan setValueCommand
-	checkChan  chan checkValueExistCommand
-	stopChan   chan struct{}
-	expiration time.Duration
+	data         map[string]CacheValue
+	setChan      chan setValueCommand
+	checkChan    chan checkValueExistCommand
+	stopChan     chan struct{}
+	expiration   time.Duration
+	timerFactory timerFactory
 }
 
 func NewCache(expiration time.Duration) *Cache {
 	cache := &Cache{
-		data:       make(map[string]CacheValue),
-		setChan:    make(chan setValueCommand),
-		checkChan:  make(chan checkValueExistCommand),
-		stopChan:   make(chan struct{}),
-		expiration: expiration,
+		data:         make(map[string]CacheValue),
+		setChan:      make(chan setValueCommand),
+		checkChan:    make(chan checkValueExistCommand),
+		stopChan:     make(chan struct{}),
+		expiration:   expiration,
+		timerFactory: realTimerFactory{},
 	}
-
-	go cache.start()
 
 	return cache
 }
 
-func (c *Cache) start() {
+func (c *Cache) Start() {
 	h := make(CacheExpirationSorter, 0)
-	var evictionTimer *time.Timer
+	var evictionTimer timer
 	var evictionTimerChan <-chan time.Time
 
 	for {
@@ -72,10 +99,10 @@ func (c *Cache) start() {
 			sort.Sort(h) // TODO: Could potentially to insertion sort here instead.
 
 			if evictionTimer != nil {
-				evictionTimer.Stop()
+				evictionTimer.stop()
 			}
-			evictionTimer := time.NewTimer(h[len(h)-1].expiration.Sub(time.Now()))
-			evictionTimerChan = evictionTimer.C
+			evictionTimer := c.timerFactory.create(h[len(h)-1].expiration.Sub(time.Now()))
+			evictionTimerChan = evictionTimer.channel()
 
 			command.done <- struct{}{}
 
@@ -94,8 +121,8 @@ func (c *Cache) start() {
 
 			if len(h) > 0 {
 				// Shedule next eviction.
-				evictionTimer := time.NewTimer(h[len(h)-1].expiration.Sub(time.Now()))
-				evictionTimerChan = evictionTimer.C
+				evictionTimer := c.timerFactory.create(h[len(h)-1].expiration.Sub(time.Now()))
+				evictionTimerChan = evictionTimer.channel()
 			}
 
 		case <-c.stopChan:

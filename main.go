@@ -197,6 +197,8 @@ func main() {
 
 		proxy := httputil.NewSingleHostReverseProxy(*upstream)
 		cache := NewCache(*cacheExpiration)
+		go cache.Start()
+		defer cache.Stop() // Here for clarity.
 
 		var acl *ACLConfig
 		if _acl, err := loadACLCredentials(*credentialsFile); err != nil {
