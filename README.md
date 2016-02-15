@@ -17,7 +17,7 @@ a username+password+valid Yubikey OTP.
 ## Usage
 
 ```bash
-./yubikey-basic-auth-proxy --help
+$ ./yubikey-basic-auth-proxy --help
 usage: yubikey-basic-auth-proxy [<flags>] <command> [<args> ...]
 
 HTTP Proxy that adds a layer of Basic Auth that does Yubikey authentication.
@@ -52,5 +52,7 @@ Execute `./yubikey-basic-auth-proxy COMMAND --help` for command specific flags.
 
 ## Current limitations
 
- * Auth cookie can't be used upstream. See #1.
- * HTTP Basic Auth can't be used upstream. See #2.
+ * Auth cookie can't be used upstream. See
+   [#1](https://github.com/JensRantil/yubikey-basic-auth-proxy/issues/1).
+ * HTTP Basic Auth can't be used upstream. See
+   [#2](https://github.com/JensRantil/yubikey-basic-auth-proxy/issues/2).
