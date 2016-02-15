@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"strings"
@@ -28,13 +27,15 @@ func (a *authProxyHandler) validateCredentialsForEntry(entry UserEntry, username
 	// Validate username.
 
 	if entry.Username != username {
+		// This check is done in the caller, too. Keeping it here just
+		// to be cautious.
 		return false
 	}
 
 	// Validate password.
 
 	if ok, err := entry.PasswordHash.Test(password); !ok {
-		log.Println("Could not validate password:", err)
+		logger.Info(PasswordOrOTPFailed{username, err.Error()})
 		return false
 	}
 
@@ -42,8 +43,11 @@ func (a *authProxyHandler) validateCredentialsForEntry(entry UserEntry, username
 
 	_, ok, err := a.yubiAuth.Verify(yubiKey)
 	if err != nil {
-		log.Println("Could not validate against Yubico:", err)
+		logger.Error(CouldNotValidateAgainstYubico{err.Error()})
 	}
+
+	logger.Info(AuthenticationSuccesful{username})
+
 	return ok
 }
 
@@ -58,10 +62,21 @@ func (a *authProxyHandler) validateCredentials(username string, basicAuthPasswor
 	passwordString := basicAuthPassword[0 : len(basicAuthPassword)-44]
 	yubikeyString := basicAuthPassword[len(basicAuthPassword)-44 : len(basicAuthPassword)]
 
+	foundAUser := false
 	for _, entry := range a.acl.Entries {
+		if entry.Username != username {
+			continue
+		}
+
+		foundAUser = true
+
 		if a.validateCredentialsForEntry(entry, username, passwordString, yubikeyString) {
 			return true, nil
 		}
+	}
+
+	if !foundAUser {
+		logger.Info(CouldNotFindUsername{username})
 	}
 
 	return false, nil
@@ -71,7 +86,7 @@ func (a authProxyHandler) isAuthenticated(req *http.Request) bool {
 	if cookie, err := req.Cookie(a.authCookieName); err != nil {
 		return false
 	} else {
-		return a.cache.IsStillThere(cookie.Value)
+		return a.cache.Contains(cookie.Value)
 	}
 }
 
@@ -108,15 +123,20 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 	}
 
 	if !valid {
-		if username, password, ok := req.BasicAuth(); ok {
-			valid, _ = a.validateCredentials(username, password)
-		}
-	}
+		var username, password string
+		var ok bool
 
-	if valid {
+		if username, password, ok = req.BasicAuth(); ok {
+			var err error
+			valid, err = a.validateCredentials(username, password)
+			if err != nil {
+				logger.Error(UnableToValidateCredentials{username, err.Error()})
+			}
+		}
+
 		var randValue string
 		if _randValue, err := generateRandomString(32); err != nil {
-			// TODO: Log
+			logger.Error(UnableToGenerateRandomString{})
 			resp.WriteHeader(http.StatusInternalServerError)
 			return
 		} else {
@@ -129,7 +149,12 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 			MaxAge: int(a.cookieExpiration.Seconds()),
 		}
 		http.SetCookie(resp, &cookie)
-		a.cache.Add(randValue)
+		a.cache.AddOrUpdate(randValue, func() {
+			logger.Debug(SessionExpired{username})
+		})
+	}
+
+	if valid {
 
 		// Important we don't proxy our username and password upstream!
 		delete(req.Header, "Authorization")
@@ -137,8 +162,12 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 		// Don't proxy the auth cookie.
 		a.stripAuthCookie(req)
 
+		logger.Info(Proxying{req.RemoteAddr, req.URL.String()})
+
 		a.proxy.ServeHTTP(resp, req)
 	} else {
+		logger.Debug(AskedUserToAuthenticate{req.RemoteAddr})
+
 		// Ask for authentication
 		resp.Header()["WWW-Authenticate"] = []string{"Basic realm=\"Please enter your username, followed by password+yubikey\""}
 		resp.WriteHeader(http.StatusUnauthorized)
