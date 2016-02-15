@@ -56,7 +56,11 @@ func (c *Cache) start() {
 		select {
 		case command := <-c.setChan:
 			if v, exist := c.data[command.item.key]; exist {
-				i := sort.Search(len(h), func(i int) bool { return !h[i].expiration.After(v.expiration) })
+				i := sort.Search(
+					len(h),
+					func(i int) bool {
+						return !h[i].expiration.After(v.expiration)
+					})
 				for h[i].key != command.item.key {
 					i++
 				}
