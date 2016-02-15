@@ -86,7 +86,7 @@ func (a authProxyHandler) isAuthenticated(req *http.Request) bool {
 	if cookie, err := req.Cookie(a.authCookieName); err != nil {
 		return false
 	} else {
-		return a.cache.IsStillThere(cookie.Value)
+		return a.cache.Contains(cookie.Value)
 	}
 }
 
@@ -123,16 +123,17 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 	}
 
 	if !valid {
-		if username, password, ok := req.BasicAuth(); ok {
+		var username, password string
+		var ok bool
+
+		if username, password, ok = req.BasicAuth(); ok {
 			var err error
 			valid, err = a.validateCredentials(username, password)
 			if err != nil {
 				logger.Error(UnableToValidateCredentials{username, err.Error()})
 			}
 		}
-	}
 
-	if valid {
 		var randValue string
 		if _randValue, err := generateRandomString(32); err != nil {
 			logger.Error(UnableToGenerateRandomString{})
@@ -148,7 +149,10 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 			MaxAge: int(a.cookieExpiration.Seconds()),
 		}
 		http.SetCookie(resp, &cookie)
-		a.cache.Add(randValue)
+		a.cache.AddOrUpdate(randValue)
+	}
+
+	if valid {
 
 		// Important we don't proxy our username and password upstream!
 		delete(req.Header, "Authorization")
