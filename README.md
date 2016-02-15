@@ -6,6 +6,14 @@ HTTP(S) Proxy that adds a layer of Basic Auth that does Yubikey authentication.
 To allow proxying through the application, a user must validate correctly using
 a username+password+valid Yubikey OTP.
 
+```
+------------            ----------------------------                 ------------
+|          | (HTTP/TLS) |                          |    (HTTP/TLS)   |          |
+| Internet |   <--->    | yubikey-basic-auth-proxy |      <--->      | Upstream |
+|          |            |     (authentication)     | (authenticated) |          |
+------------            ----------------------------                 ------------
+```
+
 ## Features
 
  * Support for non-encrypted HTTP as well as TLS.
