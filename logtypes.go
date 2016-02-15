@@ -21,3 +21,18 @@ type UnableToValidateCredentials struct {
 type UnableToLog struct {
 	ErrorString string
 }
+
+type AuthenticationSuccesful struct {
+	Username string
+}
+
+type Proxying struct {
+	RemoteAddr string
+	URL        string
+}
+
+type AskedUserToAuthenticate struct {
+	RemoteAddr string
+}
+
+type UnableToGenerateRandomString struct{}

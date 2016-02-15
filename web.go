@@ -45,6 +45,9 @@ func (a *authProxyHandler) validateCredentialsForEntry(entry UserEntry, username
 	if err != nil {
 		logger.Error(CouldNotValidateAgainstYubico{err.Error()})
 	}
+
+	logger.Info(AuthenticationSuccesful{username})
+
 	return ok
 }
 
@@ -132,7 +135,7 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 	if valid {
 		var randValue string
 		if _randValue, err := generateRandomString(32); err != nil {
-			// TODO: Log
+			logger.Error(UnableToGenerateRandomString{})
 			resp.WriteHeader(http.StatusInternalServerError)
 			return
 		} else {
@@ -153,8 +156,12 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 		// Don't proxy the auth cookie.
 		a.stripAuthCookie(req)
 
+		logger.Info(Proxying{req.RemoteAddr, req.URL.String()})
+
 		a.proxy.ServeHTTP(resp, req)
 	} else {
+		logger.Debug(AskedUserToAuthenticate{req.RemoteAddr})
+
 		// Ask for authentication
 		resp.Header()["WWW-Authenticate"] = []string{"Basic realm=\"Please enter your username, followed by password+yubikey\""}
 		resp.WriteHeader(http.StatusUnauthorized)
