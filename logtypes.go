@@ -26,6 +26,10 @@ type AuthenticationSuccesful struct {
 	Username string
 }
 
+type SessionExpired struct {
+	Username string
+}
+
 type Proxying struct {
 	RemoteAddr string
 	URL        string

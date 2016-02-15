@@ -8,6 +8,7 @@ import (
 type EvictionCallback func()
 
 type CacheValue struct {
+	callback   EvictionCallback
 	expiration time.Time
 	key        string
 }
@@ -80,6 +81,9 @@ func (c *Cache) start() {
 
 		case <-evictionTimerChan:
 			valueToEvict := h[len(h)-1]
+			if valueToEvict.callback != nil {
+				valueToEvict.callback()
+			}
 
 			delete(c.data, valueToEvict.key)
 			h = h[0 : len(h)-1]
@@ -100,11 +104,12 @@ func (c *Cache) Stop() {
 	close(c.stopChan)
 }
 
-func (c *Cache) AddOrUpdate(key string) {
+func (c *Cache) AddOrUpdate(key string, callback EvictionCallback) {
 	command := setValueCommand{
 		item: CacheValue{
 			key:        key,
 			expiration: time.Now().Add(c.expiration),
+			callback:   callback,
 		},
 		done: make(chan struct{}, 1),
 	}

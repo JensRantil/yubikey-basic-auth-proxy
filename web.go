@@ -149,7 +149,9 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 			MaxAge: int(a.cookieExpiration.Seconds()),
 		}
 		http.SetCookie(resp, &cookie)
-		a.cache.AddOrUpdate(randValue)
+		a.cache.AddOrUpdate(randValue, func() {
+			logger.Debug(SessionExpired{username})
+		})
 	}
 
 	if valid {
