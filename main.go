@@ -134,12 +134,19 @@ func main() {
 		}
 		truncatedYubikey = truncatedYubikey[0:12]
 
+		for _, entry := range aclConfig.Entries {
+			if entry.Username == *addUsername && entry.Yubikey == truncatedYubikey {
+				log.Fatal("The (username, yubikey) is already added. Please execute 'yubikey-basic-auth-proxy credentials remove ", entry.Username, " ", entry.Yubikey, "' before adding a new one.")
+			}
+		}
+
 		var newEntry *UserEntry
 		if e, err := NewUserEntry(*addUsername, *addPassword, truncatedYubikey, DefaultScryptData); err != nil {
 			log.Fatal(err)
 		} else {
 			newEntry = e
 		}
+
 		aclConfig.Entries = append(aclConfig.Entries, *newEntry)
 
 		if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
