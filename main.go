@@ -7,9 +7,15 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"syscall"
 
 	"github.com/GeertJohan/yubigo"
+	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/alecthomas/kingpin.v2"
+)
+
+const (
+	STDIN_PASSWORD_ARG = "-"
 )
 
 var (
@@ -36,7 +42,7 @@ var (
 	add         = credentials.Command("add", "Add a credentials.")
 	addUsername = add.Arg("username", "Username to add.").Required().String()
 	addYubikey  = add.Arg("yubikey", "The 12 character yubikey identifier. Can also be a Yubikey OTP, which automatically will be truncated.").Required().String()
-	addPassword = add.Arg("password", "Optional password. If not defined, it will be asked for interactively.").String()
+	addPassword = add.Arg("password", "Optional password. If not defined, it will be asked for interactively.").Default(STDIN_PASSWORD_ARG).String()
 
 	list = credentials.Command("list", "List the credentials.")
 
@@ -102,6 +108,22 @@ func initLogging() {
 	}
 }
 
+func readPasswordFromStdin() string {
+	oldState, err := terminal.MakeRaw(syscall.Stdin)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer terminal.Restore(syscall.Stdin, oldState)
+
+	var password []byte
+	password, err = terminal.ReadPassword(syscall.Stdin)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return string(password)
+}
+
 func main() {
 	flagCommand := kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -138,6 +160,11 @@ func main() {
 			if entry.Username == *addUsername && entry.Yubikey == truncatedYubikey {
 				log.Fatal("The (username, yubikey) is already added. Please execute 'yubikey-basic-auth-proxy credentials remove ", entry.Username, " ", entry.Yubikey, "' before adding a new one.")
 			}
+		}
+
+		if *addPassword == STDIN_PASSWORD_ARG {
+			fmt.Print("Password: ")
+			*addPassword = readPasswordFromStdin()
 		}
 
 		var newEntry *UserEntry
