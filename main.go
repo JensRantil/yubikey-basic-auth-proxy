@@ -39,8 +39,6 @@ var (
 
 	credentials = app.Command("credentials", "Commands to modify credentials.")
 
-	initialize = credentials.Command("init", "Initialize ACL config.")
-
 	add         = credentials.Command("add", "Add a credentials.")
 	addUsername = add.Arg("username", "Username to add.").Required().String()
 	addYubikey  = add.Arg("yubikey", "The 12 character yubikey identifier. Can also be a Yubikey OTP, which automatically will be truncated.").Required().String()
@@ -132,12 +130,6 @@ func main() {
 	initLogging()
 
 	switch flagCommand {
-	case "credentials init":
-		aclConfig := NewACLConfig()
-		// TODO: Fail if file already exists. Possibly support forcing recreation of it.
-		if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
-			log.Fatal(err)
-		}
 	case "credentials add":
 		var aclConfig *ACLConfig
 		if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {

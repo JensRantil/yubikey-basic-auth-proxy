@@ -44,9 +44,6 @@ Commands:
   serve [<flags>] <upstream> <yubico-api-id> <yubico-api-key>
     Run the proxy.
 
-  credentials init
-    Initialize ACL config.
-
   credentials add <username> <yubikey> [<password>]
     Add a credentials.
 
