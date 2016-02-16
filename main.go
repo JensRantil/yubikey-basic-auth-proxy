@@ -141,10 +141,10 @@ func main() {
 	case "credentials add":
 		var aclConfig *ACLConfig
 		if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
-			if err != os.ErrNotExist {
-				log.Fatal("Could not load credentials:", err)
-			} else {
+			if os.IsNotExist(err) {
 				aclConfig = NewACLConfig()
+			} else {
+				log.Fatal("Could not load credentials:", err)
 			}
 		} else {
 			aclConfig = _aclConfig
