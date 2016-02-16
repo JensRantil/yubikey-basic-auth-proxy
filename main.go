@@ -139,8 +139,6 @@ func main() {
 			log.Fatal(err)
 		}
 	case "credentials add":
-		// TODO: Support interactive input of password so that it doesn't end up in shell history.
-
 		var aclConfig *ACLConfig
 		if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
 			if err != os.ErrNotExist {
