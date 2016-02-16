@@ -144,10 +144,20 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 		}
 
 		cookie := http.Cookie{
-			Name:   a.authCookieName,
-			Value:  randValue,
-			MaxAge: int(a.cookieExpiration.Seconds()),
+			Name:     a.authCookieName,
+			Value:    randValue,
+			MaxAge:   int(a.cookieExpiration.Seconds()),
+			HttpOnly: true,
 		}
+		if *serveCookieDomain != "" {
+			cookie.Domain = *serveCookieDomain
+		} else if host := req.Header.Get("Host"); host != "" {
+			cookie.Domain = host
+		}
+		if *serveCookieSecure || !*insecure {
+			cookie.Secure = true
+		}
+
 		http.SetCookie(resp, &cookie)
 		a.cache.AddOrUpdate(randValue, func() {
 			logger.Debug(SessionExpired{username})
