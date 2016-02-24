@@ -79,7 +79,7 @@ func saveACLCredentials(filename string, aclConfig *ACLConfig) error {
 	}
 	defer file.Close()
 
-	return aclConfig.WriteTo(file)
+	return aclConfig.EncodeTo(file)
 }
 
 var (

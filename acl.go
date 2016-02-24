@@ -80,7 +80,7 @@ func NewACLConfigFromReader(reader io.Reader) (*ACLConfig, error) {
 	return config, decoder.Decode(config)
 }
 
-func (a *ACLConfig) WriteTo(writer io.Writer) error {
+func (a *ACLConfig) EncodeTo(writer io.Writer) error {
 	encoder := json.NewEncoder(writer)
 	return encoder.Encode(a)
 }
