@@ -85,18 +85,16 @@ func (a *authProxyHandler) validateCredentials(username string, basicAuthPasswor
 func (a authProxyHandler) isAuthenticated(req *http.Request) bool {
 	if cookie, err := req.Cookie(a.authCookieName); err != nil {
 		return false
-	} else {
-		return a.cache.Contains(cookie.Value)
 	}
+	return a.cache.Contains(cookie.Value)
 }
 
 func generateRandomString(bytesSource int) (string, error) {
 	slots := make([]byte, 32)
 	if _, err := rand.Reader.Read(slots); err != nil {
 		return "", err
-	} else {
-		return hex.EncodeToString(slots), nil
 	}
+	return hex.EncodeToString(slots), nil
 
 }
 
@@ -139,9 +137,8 @@ func (a authProxyHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 			logger.Error(UnableToGenerateRandomString{})
 			resp.WriteHeader(http.StatusInternalServerError)
 			return
-		} else {
-			randValue = _randValue
 		}
+		randValue = _randValue
 
 		cookie := http.Cookie{
 			Name:     a.authCookieName,
