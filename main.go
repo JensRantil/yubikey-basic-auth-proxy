@@ -124,6 +124,127 @@ func readPasswordFromStdin() string {
 	return string(password)
 }
 
+func addCredentials() {
+	var aclConfig *ACLConfig
+	if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
+		if os.IsNotExist(err) {
+			aclConfig = NewACLConfig()
+		} else {
+			log.Fatal("Could not load credentials:", err)
+		}
+	} else {
+		aclConfig = _aclConfig
+	}
+
+	truncatedYubikey := *addYubikey
+	if len(truncatedYubikey) < 12 {
+		log.Fatal("Yubikey must be at least 12 characters.")
+	}
+	truncatedYubikey = truncatedYubikey[0:12]
+
+	for _, entry := range aclConfig.Entries {
+		if entry.Username == *addUsername && entry.Yubikey == truncatedYubikey {
+			log.Fatal("The (username, yubikey) is already added. Please execute 'yubikey-basic-auth-proxy credentials remove ", entry.Username, " ", entry.Yubikey, "' before adding a new one.")
+		}
+	}
+
+	if *addPassword == STDIN_PASSWORD_ARG {
+		fmt.Print("Password: ")
+		*addPassword = readPasswordFromStdin()
+	}
+
+	var newEntry *UserEntry
+	if e, err := NewUserEntry(*addUsername, *addPassword, truncatedYubikey, DefaultScryptData); err != nil {
+		log.Fatal(err)
+	} else {
+		newEntry = e
+	}
+
+	aclConfig.Entries = append(aclConfig.Entries, *newEntry)
+
+	if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func removeCredentials() {
+	var aclConfig *ACLConfig
+	if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
+		if err != os.ErrNotExist {
+			log.Fatal("Could not load credentials:", err)
+		} else {
+			aclConfig = NewACLConfig()
+		}
+	} else {
+		aclConfig = _aclConfig
+	}
+
+	filteredEntries := make([]UserEntry, 0)
+	for _, entry := range aclConfig.Entries {
+		if entry.Username != *removeUsername && (removeYubico == nil || entry.Yubikey != *removeYubico) {
+			filteredEntries = append(filteredEntries, entry)
+		}
+	}
+	aclConfig.Entries = filteredEntries
+
+	if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func listCredentials() {
+	aclConfig, err := loadACLCredentials(*credentialsFile)
+	if err != nil {
+		log.Fatal("Could not load credentials:", err)
+	}
+
+	for _, entry := range aclConfig.Entries {
+		fmt.Printf("username: %s                 yubikey: %s\n", entry.Username, entry.Yubikey)
+	}
+}
+
+func serveProxy() {
+	if !xor(*insecure, *certificateFile != "" && *privateKeyFile != "") {
+		app.FatalUsage("Either set certificate and private key for TLS (recommended), or set --insecure flag.")
+	}
+
+	var yubiAuth *yubigo.YubiAuth
+	if _yubiAuth, err := yubigo.NewYubiAuth(*yubicoId, *yubicoKey); err != nil {
+		log.Fatal("Could not instantiate the yubico connector:", err)
+	} else {
+		yubiAuth = _yubiAuth
+	}
+
+	// Instantiate the authentication proxy.
+
+	proxy := httputil.NewSingleHostReverseProxy(*upstream)
+	cache := NewCache(*cacheExpiration)
+	go cache.Start()
+	defer cache.Stop() // Here for clarity.
+
+	var acl *ACLConfig
+	if _acl, err := loadACLCredentials(*credentialsFile); err != nil {
+		log.Fatal("Could not load credentials:", err)
+	} else {
+		acl = _acl
+	}
+
+	authProxy := authProxyHandler{
+		acl:              acl,
+		authCookieName:   *authCookieName,
+		yubiAuth:         yubiAuth,
+		cache:            *cache,
+		proxy:            proxy,
+		cookieExpiration: *cacheExpiration,
+	}
+
+	if *insecure {
+		log.Fatal(http.ListenAndServe(*listen, authProxy))
+	} else {
+		log.Fatal(http.ListenAndServeTLS(*listen, *certificateFile, *privateKeyFile, authProxy))
+	}
+}
+
 func main() {
 	flagCommand := kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -131,122 +252,13 @@ func main() {
 
 	switch flagCommand {
 	case "credentials add":
-		var aclConfig *ACLConfig
-		if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
-			if os.IsNotExist(err) {
-				aclConfig = NewACLConfig()
-			} else {
-				log.Fatal("Could not load credentials:", err)
-			}
-		} else {
-			aclConfig = _aclConfig
-		}
-
-		truncatedYubikey := *addYubikey
-		if len(truncatedYubikey) < 12 {
-			log.Fatal("Yubikey must be at least 12 characters.")
-		}
-		truncatedYubikey = truncatedYubikey[0:12]
-
-		for _, entry := range aclConfig.Entries {
-			if entry.Username == *addUsername && entry.Yubikey == truncatedYubikey {
-				log.Fatal("The (username, yubikey) is already added. Please execute 'yubikey-basic-auth-proxy credentials remove ", entry.Username, " ", entry.Yubikey, "' before adding a new one.")
-			}
-		}
-
-		if *addPassword == STDIN_PASSWORD_ARG {
-			fmt.Print("Password: ")
-			*addPassword = readPasswordFromStdin()
-		}
-
-		var newEntry *UserEntry
-		if e, err := NewUserEntry(*addUsername, *addPassword, truncatedYubikey, DefaultScryptData); err != nil {
-			log.Fatal(err)
-		} else {
-			newEntry = e
-		}
-
-		aclConfig.Entries = append(aclConfig.Entries, *newEntry)
-
-		if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
-			log.Fatal(err)
-		}
-
+		addCredentials()
 	case "credentials remove":
-		var aclConfig *ACLConfig
-		if _aclConfig, err := loadACLCredentials(*credentialsFile); err != nil {
-			if err != os.ErrNotExist {
-				log.Fatal("Could not load credentials:", err)
-			} else {
-				aclConfig = NewACLConfig()
-			}
-		} else {
-			aclConfig = _aclConfig
-		}
-
-		filteredEntries := make([]UserEntry, 0)
-		for _, entry := range aclConfig.Entries {
-			if entry.Username != *removeUsername && (removeYubico == nil || entry.Yubikey != *removeYubico) {
-				filteredEntries = append(filteredEntries, entry)
-			}
-		}
-		aclConfig.Entries = filteredEntries
-
-		if err := saveACLCredentials(*credentialsFile, aclConfig); err != nil {
-			log.Fatal(err)
-		}
-
+		removeCredentials()
 	case "credentials list":
-		aclConfig, err := loadACLCredentials(*credentialsFile)
-		if err != nil {
-			log.Fatal("Could not load credentials:", err)
-		}
-
-		for _, entry := range aclConfig.Entries {
-			fmt.Printf("username: %s                 yubikey: %s\n", entry.Username, entry.Yubikey)
-		}
-
+		listCredentials()
 	case "serve":
-
-		if !xor(*insecure, *certificateFile != "" && *privateKeyFile != "") {
-			app.FatalUsage("Either set certificate and private key for TLS (recommended), or set --insecure flag.")
-		}
-
-		var yubiAuth *yubigo.YubiAuth
-		if _yubiAuth, err := yubigo.NewYubiAuth(*yubicoId, *yubicoKey); err != nil {
-			log.Fatal("Could not instantiate the yubico connector:", err)
-		} else {
-			yubiAuth = _yubiAuth
-		}
-
-		// Instantiate the authentication proxy.
-
-		proxy := httputil.NewSingleHostReverseProxy(*upstream)
-		cache := NewCache(*cacheExpiration)
-		go cache.Start()
-		defer cache.Stop() // Here for clarity.
-
-		var acl *ACLConfig
-		if _acl, err := loadACLCredentials(*credentialsFile); err != nil {
-			log.Fatal("Could not load credentials:", err)
-		} else {
-			acl = _acl
-		}
-
-		authProxy := authProxyHandler{
-			acl:              acl,
-			authCookieName:   *authCookieName,
-			yubiAuth:         yubiAuth,
-			cache:            *cache,
-			proxy:            proxy,
-			cookieExpiration: *cacheExpiration,
-		}
-
-		if *insecure {
-			log.Fatal(http.ListenAndServe(*listen, authProxy))
-		} else {
-			log.Fatal(http.ListenAndServeTLS(*listen, *certificateFile, *privateKeyFile, authProxy))
-		}
+		serveProxy()
 	default:
 		app.FatalUsage("Unrecognized command.")
 	}
