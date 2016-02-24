@@ -1,4 +1,4 @@
-[![Build Status](https://secure.travis-ci.org/JensRantil/yubikey-basic-auth-proxy.png?branch=master)](http://travis-ci.org/JensRantil/yubikey-basic-auth-proxy)
+[![Build Status](https://secure.travis-ci.org/JensRantil/yubikey-basic-auth-proxy.png?branch=master)](http://travis-ci.org/JensRantil/yubikey-basic-auth-proxy) [![Go Report Card](https://goreportcard.com/badge/github.com/JensRantil/yubikey-basic-auth-proxy)](https://goreportcard.com/report/github.com/JensRantil/yubikey-basic-auth-proxy)
 
 # Yubikey Basic Auth HTTP(S) Proxy.
 
