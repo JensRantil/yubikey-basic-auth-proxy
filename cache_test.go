@@ -97,7 +97,7 @@ func TestMultipleExpirations(t *T) {
 		c.AddOrUpdate(key, func() {})
 	}
 
-	for i, _ := range keys {
+	for i := range keys {
 		expireChan <- time.Now()
 		for j := 0; j < i+1; j++ {
 			if key := keys[j]; c.Contains(key) {

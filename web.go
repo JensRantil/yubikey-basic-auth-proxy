@@ -60,7 +60,7 @@ func (a *authProxyHandler) validateCredentials(username string, basicAuthPasswor
 		return false, errors.New("Yubikey missing.")
 	}
 	passwordString := basicAuthPassword[0 : len(basicAuthPassword)-44]
-	yubikeyString := basicAuthPassword[len(basicAuthPassword)-44 : len(basicAuthPassword)]
+	yubikeyString := basicAuthPassword[len(basicAuthPassword)-44:]
 
 	foundAUser := false
 	for _, entry := range a.acl.Entries {
