@@ -2,7 +2,7 @@
 
 # Yubikey Basic Auth HTTP(S) Proxy.
 
-HTTP(S) Proxy that adds a layer of Basic Auth that does Yubikey authentication.
+Reverse HTTP(S) Proxy that adds a layer of Basic Auth that does Yubikey authentication.
 To allow proxying through the application, a user must validate correctly using
 a username+password+valid Yubikey OTP.
 
