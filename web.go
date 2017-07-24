@@ -12,6 +12,8 @@ import (
 	"github.com/GeertJohan/yubigo"
 )
 
+const yubikeyLength = 44
+
 type authProxyHandler struct {
 	acl              *ACLConfig
 	cache            Cache
@@ -56,11 +58,11 @@ func (a *authProxyHandler) validateCredentials(username string, basicAuthPasswor
 		return false, errors.New("Username must not be empty.")
 	}
 
-	if len(basicAuthPassword) < 44 {
+	if len(basicAuthPassword) < yubikeyLength {
 		return false, errors.New("Yubikey missing.")
 	}
-	passwordString := basicAuthPassword[0 : len(basicAuthPassword)-44]
-	yubikeyString := basicAuthPassword[len(basicAuthPassword)-44:]
+	passwordString := basicAuthPassword[0 : len(basicAuthPassword)-yubikeyLength]
+	yubikeyString := basicAuthPassword[len(basicAuthPassword)-yubikeyLength:]
 
 	foundAUser := false
 	for _, entry := range a.acl.Entries {
